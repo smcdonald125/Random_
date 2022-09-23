@@ -14,78 +14,31 @@ How to run:
     5. Run the script. Type in the prompt: python /full/path/to/mine_LULC_matrices.py and hit enter
     6. Check the output where you defined the output CSV to go!
 """
-import pandas as pd
+import pandas as pd 
 import os
 
 """
 ----------------------
 USER DEFINED VARIABLES
 ----------------------
-transition_dict: dictionary of field_name: [from classes], [to classes]
+transition_flag: "ALL" if the user wants every transition for the specified schema (transition_dict will be created for you)
+                 "" if user wants to define the transition dict themselves
+transition_dict: dictionary of field_name: [from classes (T1)], [to classes (T2)]
+        Example:
+            'IMP_TC'    : ['ROAD', 'IMPS', 'IMPO'], ['FORE', 'TCOT'],
+            'IMP_AG'    : ['ROAD', 'IMPS', 'IMPO'], ['CROP', 'PAST'],
 schema: matrix schema to mine: 13, 18, or 54
 bp_flag: True if bay portion of counties and False if full county
 output_path: set the full path to the CSV you wish to write the results to
 planimetrics_folder: path to the planimetrics folder/landuse/version2
 """
+transition_flag = 'ALL'
 transition_dict = {
-    'IMP_TC'    : [ ['ROAD', 'IMPS', 'IMPO'], ['FORE', 'TCOT'] ],
-    'IMP_AG'    : [ ['ROAD', 'IMPS', 'IMPO'], ['CROP', 'PAST'] ],
 }
 schema = 18
 bp_flag = False
-output_file = r'G:\ImageryServer\usgs_sc\smcdonald\Scripts\Testing\LULC_18x18_IMPLoss.csv'
-planimetrics_folder = r"X:/landuse/version2"
-
-def validate_input():
-    # validate transition dict
-    if len(transition_dict) == 0:
-        raise TypeError("Error: no transitions defined in transition_dict")
-    for t in transition_dict:
-        e_msg = "Error: transition dict expects \n\tstring variable name: followed by a list containing 2 lists"
-        if type(transition_dict[t]) != list or len(transition_dict[t]) != 2:
-            raise TypeError(e_msg)
-        if type(transition_dict[t][0]) != list or type(transition_dict[t][0]) != list:
-            raise TypeError(e_msg)
-
-    # validate paths
-    if not os.path.isdir(planimetrics_folder):
-        raise TypeError(f"Planimetrics folder path does not exist: {planimetrics_folder}")
-
-    if not os.path.isdir(os.path.dirname(output_file)):
-        raise TypeError(f"Output file folder does not exist: {os.path.dirname(output_file)}")
-
-    if os.path.isfile(output_file):
-        raise TypeError(f"Output file already exists: {output_file}")
-
-    # validate schema
-    if schema not in [13, 18, 54]:
-        raise TypeError(f"Invalid schema value, expected 13, 18 or 54")
-
-    # validate bay portion flag
-    if type(bp_flag) != bool:
-        raise TypeError(f"Invalid bp_flag type, expected True or False of boolean type")
-
-    # print validation passed
-    out_msg = f"Mining {schema}x{schema} matrices for "
-    if bp_flag:
-        out_msg += f"bay portion of counties\n"
-    else:
-        out_msg += f"full extent of counties\n"
-
-    for t in transition_dict:
-        out_msg += f"\tCreating {t} field: from "
-        for i in range(len(transition_dict[t][0])):
-            if i == len(transition_dict[t][0]) - 1:
-                out_msg += f"{transition_dict[t][0][i]} to "
-            else:
-                out_msg += f"{transition_dict[t][0][i]}, "
-        for i in range(len(transition_dict[t][1])):
-            if i == len(transition_dict[t][1]) - 1:
-                out_msg += f"{transition_dict[t][1][i]}\n"
-            else:
-                out_msg += f"{transition_dict[t][1][i]}, "
-    print(out_msg)
-
+out_path = r'PATH/LULC_county_18x18-transitions.csv'
+planimetrics_folder = r"PATH"
 
 def sum_classes(from_classes, to_classes, df):
     val = 0
@@ -131,15 +84,77 @@ def get_change(planimetrics_folder, cfs):
     # return data
     return df
 
-if __name__=="__main__":
-    validate_input()
+def build_transition_dict():
+    """
+    Method: build_transition_dict()
+    Purpose: If the transition_flag variable is set to ALL, this method will be executed. This method builds the 
+             transition_dict for all possible transitions for the selected schema.
+    Params: N/A
+    Returns: N/A
+    """
+    # define list of classes for schema
+    if schema == 18:
+        classes = [
+            "CROP",
+            "EXTR",
+            "FORE",
+            "HARF",
+            "IMPO",
+            "IMPS",
+            "NATS",
+            "PAST",
+            "PDEV",
+            "RIVW",
+            "ROAD",
+            "TCIS",
+            "TCOT",
+            "TCTG",
+            "TDLW",
+            "TERW",
+            "TURF",
+            "WATR",
+        ]
+    elif schema == 13:
+        classes = [
+            "IR"  ,
+            "INR" ,
+            "TCI" ,
+            "TG"  ,
+            "TCT" ,
+            "FORE",
+            "MO"  ,
+            "CRP" ,
+            "PAS" ,
+            "WLT" ,
+            "WLO" ,
+            "WLF" ,
+            "WAT" ,
+        ]
+    elif schema == 54: # TODO: build 54 class list
+        raise TypeError(f"Need to build 54-class list in build_transition_dict()")
+    else:
+        raise TypeError(f"Invalid schema {schema}: Expected 13, 18, or 54")
 
+    # build transition dict
+    global transition_dict
+    transition_dict = {} # make sure it starts empty
+    # build all possible transitions
+    for t1 in classes:
+        for t2 in classes:
+            if t1 == t2:
+                continue
+            transition_dict[f"{t1}_{t2}"] = [t1], [t2]
+
+
+if __name__=="__main__":
     # get list of cofips
     cfs = [x for x in os.listdir(planimetrics_folder) if os.path.isdir(f"{planimetrics_folder}/{x}") and 'backup' not in x]
     if len (cfs) != 206:
         raise TypeError(f"Incorrect number of counties: {len(cfs)}")
-    else:
-        print("Analyzing 206 Counties...")
+
+    # build transition dict if use wants all possible
+    if transition_flag == "ALL":
+        build_transition_dict()
 
     # create change metric
     change_df = get_change(planimetrics_folder, cfs)
@@ -153,6 +168,4 @@ if __name__=="__main__":
     change_df = change_df[cols]
 
     # write out results
-    print(f"Writing Results to {output_file}")
-    change_df.to_csv(output_file, index=False)
-    print("Complete")
+    change_df.to_csv(out_path, index=False)
